@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glitched Digits — How Far Can AI See?</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3d;
+    --accent: #00e5ff;
+    --accent2: #ff3d71;
+    --accent3: #a259ff;
+    --text: #e8e8f0;
+    --text-dim: #6b6b8a;
+    --green: #00ff88;
+    --yellow: #ffcc00;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,229,255,0.015) 2px, rgba(0,229,255,0.015) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(0,229,255,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  header {
+    padding: 28px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    position: relative;
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  header span {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    background: var(--surface2);
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    margin-left: auto;
+  }
+
+  .main-layout {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 0;
+    height: calc(100vh - 73px);
+  }
+
+  /* LEFT PANEL */
+  .left-panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px;
+    gap: 24px;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Canvas */
+  .canvas-wrapper {
+    position: relative;
+  }
+
+  #drawCanvas {
+    display: block;
+    background: #fff;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    cursor: crosshair;
+    width: 100%;
+    aspect-ratio: 1;
+    transition: border-color 0.2s;
+    image-rendering: pixelated;
+  }
+  #drawCanvas:hover { border-color: var(--accent); }
+
+  .canvas-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 6px;
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  button {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    border: none;
+    cursor: pointer;
+    padding: 10px 14px;
+    border-radius: 3px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    font-weight: 700;
+    grid-column: 1/-1;
+    padding: 13px;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    box-shadow: 0 0 20px rgba(0,229,255,0.3);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 0 30px rgba(0,229,255,0.5);
+    transform: translateY(-1px);
+  }
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--text-dim); }
+
+  /* Noise controls */
+  .noise-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    transition: border-color 0.2s;
+  }
+  .noise-card.active { border-color: var(--accent3); }
+
+  .noise-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .noise-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .noise-icon { font-size: 1rem; }
+
+  .toggle {
+    width: 34px; height: 18px;
+    background: var(--border);
+    border-radius: 9px;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+    border: none;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent3); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    background: white;
+    border-radius: 50%;
+    top: 3px; left: 3px;
+    transition: transform 0.2s;
+  }
+  .toggle.on::after { transform: translateX(16px); }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent3);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 8px var(--accent3);
+  }
+
+  .slider-val {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent3);
+    width: 28px;
+    text-align: right;
+  }
+
+  /* RIGHT PANEL */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .result-section {
+    padding: 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 28px;
+    align-items: flex-start;
+  }
+
+  /* Preview canvases */
+  .preview-group {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .preview-item {
+    text-align: center;
+  }
+
+  .preview-item canvas {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    image-rendering: pixelated;
+    width: 100px;
+    height: 100px;
+  }
+  .preview-item canvas.highlighted { border-color: var(--accent2); box-shadow: 0 0 12px rgba(255,61,113,0.4); }
+
+  .preview-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    margin-top: 5px;
+    letter-spacing: 0.08em;
+  }
+
+  /* Prediction display */
+  .prediction-panel {
+    flex: 1;
+  }
+
+  .prediction-main {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .digit-display {
+    font-family: 'Space Mono', monospace;
+    font-size: 5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 30px var(--accent);
+    width: 80px;
+    text-align: center;
+  }
+  .digit-display.noisy { color: var(--accent2); text-shadow: 0 0 30px var(--accent2); }
+  .digit-display.placeholder { color: var(--border); text-shadow: none; font-size: 3rem; }
+
+  .confidence-col {
+    flex: 1;
+  }
+
+  .conf-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .conf-val {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--green);
+  }
+  .conf-val.low { color: var(--yellow); }
+  .conf-val.vlow { color: var(--accent2); }
+
+  /* Bar chart */
+  .prob-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .prob-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 20px;
+  }
+
+  .prob-digit {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    width: 12px;
+  }
+
+  .prob-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .prob-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    background: var(--accent3);
+  }
+  .prob-bar-fill.top { background: var(--accent); }
+
+  .prob-pct {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    width: 36px;
+    text-align: right;
+  }
+
+  /* Stress test section */
+  .stress-section {
+    padding: 28px;
+    flex: 1;
+  }
+
+  .stress-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .stress-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  /* Accuracy decay chart */
+  #stressChart {
+    width: 100%;
+    height: 160px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  /* Status log */
+  .status-log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-top: 16px;
+    min-height: 60px;
+  }
+  .status-log .acc { color: var(--green); }
+  .status-log .warn { color: var(--yellow); }
+  .status-log .err { color: var(--accent2); }
+  .status-log .info { color: var(--accent); }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--text-dim);
+    gap: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    text-align: center;
+  }
+  .empty-state .big { font-size: 2.5rem; }
+
+  /* Comparison row */
+  .compare-section {
+    padding: 0 28px 28px;
+  }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .compare-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .compare-card .c-digit {
+    font-family: 'Space Mono', monospace;
+    font-size: 2rem;
+    font-weight: 700;
+  }
+  .compare-card .c-type {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: 'Space Mono', monospace;
+  }
+  .compare-card .c-conf {
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-top: 6px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  .loading-dots::after {
+    content: '';
+    animation: dots 1.2s steps(4,end) infinite;
+  }
+  @keyframes dots {
+    0%,20%{content:''} 40%{content:'.'} 60%{content:'..'} 80%,100%{content:'...'}
+  }
+
+  /* Algorithm Selector */
+  .algo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .algo-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    padding: 10px 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.5;
+  }
+  .algo-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  .algo-btn.selected {
+    border-color: var(--accent3);
+    color: var(--accent3);
+    background: rgba(162,89,255,0.1);
+    box-shadow: 0 0 12px rgba(162,89,255,0.2);
+  }
+  .algo-btn .algo-icon { font-size: 1.1rem; display: block; margin-bottom: 3px; }
+  .algo-btn .algo-acc {
+    color: var(--text-dim);
+    font-size: 0.6rem;
+    display: block;
+    margin-top: 2px;
+  }
+  .algo-btn.selected .algo-acc { color: var(--accent3); }
+
+  .compare-all-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    padding: 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .compare-all-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .compare-all-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Compare all results table */
+  .algo-compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    margin-top: 12px;
+  }
+  .algo-compare-table th {
+    color: var(--text-dim);
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .algo-compare-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid rgba(42,42,61,0.5);
+    color: var(--text);
+  }
+  .algo-compare-table tr:last-child td { border-bottom: none; }
+  .algo-compare-table .correct { color: var(--green); }
+  .algo-compare-table .wrong { color: var(--accent2); }
+  .algo-compare-table .winner { background: rgba(0,229,255,0.05); }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (max-width: 800px) {
+    .main-layout { grid-template-columns: 1fr; height: auto; }
+    .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+    .result-section { flex-direction: column; }
+    .compare-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-dot"></div>
+  <h1>Glitched Digits — How Far Can AI See?</h1>
+  <span>AIDS Dept · 2026</span>
+</header>
+
+<div class="main-layout">
+  <!-- LEFT PANEL -->
+  <div class="left-panel">
+    <div>
+      <div class="section-label">Draw Digit</div>
+      <div class="canvas-wrapper">
+        <canvas id="drawCanvas" width="280" height="280"></canvas>
+        <div class="canvas-hint">Draw any digit (0–9) with your mouse or touch</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="recognizeBtn" disabled>
+        ▶ ANALYZE
+      </button>
+      <button class="btn-secondary" id="clearBtn">✕ Clear</button>
+      <button class="btn-secondary" id="sampleBtn">⚡ Sample</button>
+    </div>
+
+    <div>
+      <div class="section-label">Noise Controls</div>
+
+      <div class="noise-card" id="gaussCard">
+        <div class="noise-header">
+          <div class="noise-name"><span class="noise-icon">〰</span> Gaussian Noise</div>
+          <button class="toggle" id="gaussToggle" onclick="toggleNoise('gauss')"></button>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="gaussSlider" min="0" max="100" value="30" oninput="updateSlider('gauss')">
+          <span class="slider-val" id="gaussVal">30</span>
+        </div>
+      </div>
+
+      <div class="noise-card" id="blurCard" style="margin-top:10px;">
+        <div class="noise-header">
+          <div class="noise-name"><span class="noise-icon">◌</span> Motion Blur</div>
+          <button class="toggle" id="blurToggle" onclick="toggleNoise('blur')"></button>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="blurSlider" min="1" max="15" value="3" oninput="updateSlider('blur')">
+          <span class="slider-val" id="blurVal">3</span>
+        </div>
+      </div>
+
+      <div class="noise-card" id="rotCard" style="margin-top:10px;">
+        <div class="noise-header">
+          <div class="noise-name"><span class="noise-icon">↻</span> Rotation</div>
+          <button class="toggle" id="rotToggle" onclick="toggleNoise('rot')"></button>
+        </div>
+        <div class="slider-row">
+          <input type="range" id="rotSlider" min="0" max="90" value="20" oninput="updateSlider('rot')">
+          <span class="slider-val" id="rotVal">20°</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Algorithm Selector -->
+    <div>
+      <div class="section-label">Algorithm</div>
+      <div class="algo-grid">
+        <button class="algo-btn selected" id="algo-cnn" onclick="selectAlgo('cnn')">
+          <span class="algo-icon">🧠</span>
+          CNN
+          <span class="algo-acc">~99.2% acc</span>
+        </button>
+        <button class="algo-btn" id="algo-svm" onclick="selectAlgo('svm')">
+          <span class="algo-icon">✂️</span>
+          SVM
+          <span class="algo-acc">~97.8% acc</span>
+        </button>
+        <button class="algo-btn" id="algo-knn" onclick="selectAlgo('knn')">
+          <span class="algo-icon">📍</span>
+          KNN
+          <span class="algo-acc">~96.9% acc</span>
+        </button>
+        <button class="algo-btn" id="algo-rf" onclick="selectAlgo('rf')">
+          <span class="algo-icon">🌲</span>
+          Random Forest
+          <span class="algo-acc">~97.1% acc</span>
+        </button>
+      </div>
+      <button class="compare-all-btn" id="compareAllBtn" disabled onclick="analyzeAll()">
+        ⚡ Compare All Algorithms
+      </button>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <!-- Preview + Predictions -->
+    <div class="result-section">
+      <div>
+        <div class="section-label">Image Preview</div>
+        <div class="preview-group">
+          <div class="preview-item">
+            <canvas id="cleanPreview" width="28" height="28"></canvas>
+            <div class="preview-label">CLEAN</div>
+          </div>
+          <div class="preview-item">
+            <canvas id="noisyPreview" width="28" height="28" class="highlighted"></canvas>
+            <div class="preview-label">NOISY</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="prediction-panel">
+        <div class="section-label">Prediction</div>
+
+        <div id="predictionDisplay">
+          <div class="empty-state">
+            <div class="big">✏️</div>
+            <div>Draw a digit and click ANALYZE</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="min-width:180px;">
+        <div class="section-label">Probability Distribution</div>
+        <div class="prob-bars" id="probBars">
+          <div class="empty-state" style="height:auto;padding:20px 0;font-size:0.6rem;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison -->
+    <div class="compare-section" id="compareSection" style="display:none;">
+      <div class="section-label">Clean vs. Noisy Comparison</div>
+      <div class="compare-grid" id="compareGrid"></div>
+    </div>
+
+    <!-- All Algorithms Comparison -->
+    <div class="compare-section" id="allAlgoSection" style="display:none;">
+      <div class="section-label">All Algorithms — Side by Side</div>
+      <table class="algo-compare-table" id="allAlgoTable"></table>
+    </div>
+
+    <!-- Status log -->
+    <div class="stress-section">
+      <div class="section-label">System Log</div>
+      <div class="status-log" id="statusLog">
+        <span class="info">[READY]</span> Draw a digit on the canvas to begin stress testing...<br>
+        <span class="info">[INFO]</span> Enable noise filters to simulate real-world conditions.<br>
+        <span class="info">[ADD ON]</span> Apply desired ML Algorithms and compare their performance under various noise conditions.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Canvas Drawing ─────────────────────────────────────────────
+const drawCanvas = document.getElementById('drawCanvas');
+const ctx = drawCanvas.getContext('2d');
+let isDrawing = false;
+let hasDrawn = false;
+
+ctx.fillStyle = '#fff';
+ctx.fillRect(0, 0, 280, 280);
+ctx.strokeStyle = '#000';
+ctx.lineWidth = 18;
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+
+function getPos(e) {
+  const r = drawCanvas.getBoundingClientRect();
+  const scaleX = 280 / r.width;
+  const scaleY = 280 / r.height;
+  if (e.touches) {
+    return { x: (e.touches[0].clientX - r.left) * scaleX, y: (e.touches[0].clientY - r.top) * scaleY };
+  }
+  return { x: (e.clientX - r.left) * scaleX, y: (e.clientY - r.top) * scaleY };
+}
+
+drawCanvas.addEventListener('mousedown', e => { isDrawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+drawCanvas.addEventListener('mousemove', e => { if (!isDrawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasDrawn = true; document.getElementById('recognizeBtn').disabled = false; });
+drawCanvas.addEventListener('mouseup', () => isDrawing = false);
+drawCanvas.addEventListener('mouseleave', () => isDrawing = false);
+drawCanvas.addEventListener('touchstart', e => { e.preventDefault(); isDrawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, {passive:false});
+drawCanvas.addEventListener('touchmove', e => { e.preventDefault(); if (!isDrawing) return; const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); hasDrawn = true; document.getElementById('recognizeBtn').disabled = false; }, {passive:false});
+drawCanvas.addEventListener('touchend', () => isDrawing = false);
+
+// ── Noise state ────────────────────────────────────────────────
+const noiseState = { gauss: false, blur: false, rot: false };
+
+function toggleNoise(type) {
+  noiseState[type] = !noiseState[type];
+  document.getElementById(type+'Toggle').classList.toggle('on', noiseState[type]);
+  document.getElementById(type+'Card').classList.toggle('active', noiseState[type]);
+}
+
+function updateSlider(type) {
+  const val = document.getElementById(type+'Slider').value;
+  document.getElementById(type+'Val').textContent = type === 'rot' ? val+'°' : val;
+}
+
+// ── Image Processing ───────────────────────────────────────────
+function getPixelData28x28(sourceCanvas) {
+  const tmp = document.createElement('canvas');
+  tmp.width = 28; tmp.height = 28;
+  const tc = tmp.getContext('2d');
+  tc.fillStyle = '#fff';
+  tc.fillRect(0,0,28,28);
+  tc.drawImage(sourceCanvas, 0, 0, 28, 28);
+  return tc.getImageData(0, 0, 28, 28);
+}
+
+function applyGaussianNoise(imgData, intensity) {
+  const d = new Uint8ClampedArray(imgData.data);
+  const sigma = intensity * 2;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = gaussRandom() * sigma;
+    d[i] = clamp(d[i] + n);
+    d[i+1] = clamp(d[i+1] + n);
+    d[i+2] = clamp(d[i+2] + n);
+  }
+  return new ImageData(d, imgData.width, imgData.height);
+}
+
+function gaussRandom() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function clamp(v) { return Math.max(0, Math.min(255, Math.round(v))); }
+
+function applyBlur(imgData, radius) {
+  const w = imgData.width, h = imgData.height;
+  const src = imgData.data;
+  const dst = new Uint8ClampedArray(src);
+  const r = Math.max(1, Math.round(radius));
+  // Simple box blur
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let rSum=0,gSum=0,bSum=0,cnt=0;
+      for (let ky=-r; ky<=r; ky++) {
+        for (let kx=-r; kx<=r; kx++) {
+          const nx=clamp(x+kx,0,w-1), ny=clamp(y+ky,0,h-1);
+          const idx=(ny*w+nx)*4;
+          rSum+=src[idx]; gSum+=src[idx+1]; bSum+=src[idx+2]; cnt++;
+        }
+      }
+      const i=(y*w+x)*4;
+      dst[i]=rSum/cnt; dst[i+1]=gSum/cnt; dst[i+2]=bSum/cnt; dst[i+3]=255;
+    }
+  }
+  return new ImageData(dst, w, h);
+}
+
+function clamp(v, mn=0, mx=255) { return Math.max(mn, Math.min(mx, Math.round(v))); }
+
+function applyRotation(imgData, degrees) {
+  const w = imgData.width, h = imgData.height;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tc = tmp.getContext('2d');
+  tc.fillStyle = '#fff';
+  tc.fillRect(0, 0, w, h);
+  tc.translate(w/2, h/2);
+  tc.rotate(degrees * Math.PI / 180);
+  tc.translate(-w/2, -h/2);
+  tc.putImageData(imgData, 0, 0);
+  return tc.getImageData(0, 0, w, h);
+}
+
+function imageDataToTensor(imgData) {
+  const arr = [];
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    const gray = (imgData.data[i] + imgData.data[i+1] + imgData.data[i+2]) / 3;
+    arr.push((255 - gray) / 255); // invert + normalize
+  }
+  return arr;
+}
+
+// ── AI Recognition via Flask Backend ──────────────────────────
+const FLASK_URL = "http://localhost:5000";
+let selectedAlgo = "cnn";
+
+function selectAlgo(algo) {
+  selectedAlgo = algo;
+  document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('algo-' + algo).classList.add('selected');
+  addLog(`Algorithm set to: ${algo.toUpperCase()}`, 'info');
+}
+
+async function recognizeWithFlask(cleanData, noisyData, activeNoises, algorithm) {
+  const cleanBase64 = imageDataToBase64(cleanData, 28, 28);
+  const noisyBase64 = imageDataToBase64(noisyData, 28, 28);
+
+  const response = await fetch(`${FLASK_URL}/predict`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      algorithm: algorithm,
+      clean_image: cleanBase64,
+      noisy_image: noisyBase64
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+async function recognizeAllWithFlask(cleanData, noisyData) {
+  const cleanBase64 = imageDataToBase64(cleanData, 28, 28);
+  const noisyBase64 = imageDataToBase64(noisyData, 28, 28);
+
+  const response = await fetch(`${FLASK_URL}/predict/all`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clean_image: cleanBase64,
+      noisy_image: noisyBase64
+    })
+  });
+
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return await response.json();
+}
+
+function imageDataToBase64(imgData, w, h) {
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tc = tmp.getContext('2d');
+  // Scale up for better visibility
+  const big = document.createElement('canvas');
+  big.width = 140; big.height = 140;
+  const bc = big.getContext('2d');
+  bc.imageSmoothingEnabled = false;
+  tc.putImageData(imgData, 0, 0);
+  bc.drawImage(tmp, 0, 0, 140, 140);
+  return big.toDataURL('image/png').split(',')[1];
+}
+
+// ── Preview rendering ──────────────────────────────────────────
+function renderPreview(canvasId, imgData) {
+  const c = document.getElementById(canvasId);
+  c.getContext('2d').putImageData(imgData, 0, 0);
+}
+
+// ── UI update ──────────────────────────────────────────────────
+function updatePredictionUI(result) {
+  const confDrop = result.reliability_drop;
+  const confClass = result.noisy.confidence > 0.8 ? '' : result.noisy.confidence > 0.5 ? 'low' : 'vlow';
+  const digitClass = confDrop > 15 ? 'noisy' : '';
+
+  document.getElementById('predictionDisplay').innerHTML = `
+    <div class="prediction-main">
+      <div>
+        <div class="conf-label">CLEAN</div>
+        <div class="digit-display">${result.clean.digit}</div>
+      </div>
+      <div style="color:var(--border);font-size:1.5rem;">→</div>
+      <div>
+        <div class="conf-label">NOISY</div>
+        <div class="digit-display ${digitClass}">${result.noisy.digit}</div>
+      </div>
+      <div class="confidence-col">
+        <div class="conf-label">CONFIDENCE</div>
+        <div class="conf-val ${confClass}">${Math.round(result.noisy.confidence * 100)}%</div>
+        ${confDrop > 0 ? `<div style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--accent2);margin-top:3px;">▼ ${confDrop.toFixed(1)}% drop</div>` : ''}
+        <div style="font-family:'Space Mono',monospace;font-size:0.6rem;color:var(--text-dim);margin-top:8px;max-width:140px;line-height:1.5;">${result.notes}</div>
+      </div>
+    </div>
+  `;
+
+  // Probability bars
+  const probs = result.noisy.probabilities;
+  const maxIdx = probs.indexOf(Math.max(...probs));
+  document.getElementById('probBars').innerHTML = probs.map((p, i) => `
+    <div class="prob-row">
+      <span class="prob-digit">${i}</span>
+      <div class="prob-bar-bg">
+        <div class="prob-bar-fill ${i===maxIdx?'top':''}" style="width:${p*100}%"></div>
+      </div>
+      <span class="prob-pct">${(p*100).toFixed(1)}%</span>
+    </div>
+  `).join('');
+
+  // Comparison cards
+  document.getElementById('compareSection').style.display = 'block';
+  const activeNoises = Object.entries(noiseState).filter(([,v])=>v).map(([k])=>k);
+  document.getElementById('compareGrid').innerHTML = `
+    <div class="compare-card">
+      <div class="c-digit" style="color:var(--accent)">${result.clean.digit}</div>
+      <div class="c-type">Clean Input</div>
+      <div class="c-conf" style="color:var(--green)">${Math.round(result.clean.confidence*100)}%</div>
+    </div>
+    <div class="compare-card" style="border-color:var(--border)">
+      <div style="font-size:0.7rem;color:var(--text-dim);font-family:'Space Mono',monospace;margin-bottom:6px;">
+        ${activeNoises.length > 0 ? activeNoises.map(n => ({gauss:'Gaussian',blur:'Blur',rot:'Rotation'}[n])).join(' + ') : 'No noise applied'}
+      </div>
+      <div style="font-size:1.2rem;color:var(--accent2)">⚡</div>
+      <div class="c-type">Noise Type(s)</div>
+    </div>
+    <div class="compare-card">
+      <div class="c-digit" style="color:${result.noisy.digit===result.clean.digit?'var(--green)':'var(--accent2)'}">${result.noisy.digit}</div>
+      <div class="c-type">Noisy Input</div>
+      <div class="c-conf" style="color:${result.noisy.confidence>0.7?'var(--green)':'var(--accent2)'}">${Math.round(result.noisy.confidence*100)}%</div>
+    </div>
+  `;
+}
+
+function addLog(msg, type='info') {
+  const log = document.getElementById('statusLog');
+  const tag = type === 'info' ? 'info' : type === 'ok' ? 'acc' : type === 'warn' ? 'warn' : 'err';
+  const label = {info:'[INFO]',ok:'[OK]',warn:'[WARN]',err:'[ERROR]'}[type];
+  const time = new Date().toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  log.innerHTML += `<span class="${tag}">${label}</span> <span style="color:var(--border)">${time}</span> ${msg}<br>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Main Analyze function ──────────────────────────────────────
+async function analyze() {
+  if (!hasDrawn) return;
+  const btn = document.getElementById('recognizeBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loading-dots">ANALYZING</span>';
+
+  try {
+    let cleanData = getPixelData28x28(drawCanvas);
+    renderPreview('cleanPreview', cleanData);
+
+    let noisyData = new ImageData(new Uint8ClampedArray(cleanData.data), cleanData.width, cleanData.height);
+    const activeNoises = [];
+
+    if (noiseState.rot) {
+      const deg = parseInt(document.getElementById('rotSlider').value);
+      noisyData = applyRotation(noisyData, deg);
+      activeNoises.push(`Rotation ${deg}°`);
+      addLog(`Applying rotation: ${deg}°`, 'warn');
+    }
+    if (noiseState.blur) {
+      const r = parseInt(document.getElementById('blurSlider').value);
+      noisyData = applyBlur(noisyData, r);
+      activeNoises.push(`Motion Blur (r=${r})`);
+      addLog(`Applying motion blur: radius=${r}`, 'warn');
+    }
+    if (noiseState.gauss) {
+      const intensity = parseInt(document.getElementById('gaussSlider').value);
+      noisyData = applyGaussianNoise(noisyData, intensity);
+      activeNoises.push(`Gaussian Noise (σ=${intensity*2})`);
+      addLog(`Applying Gaussian noise: σ=${intensity*2}`, 'warn');
+    }
+
+    renderPreview('noisyPreview', noisyData);
+
+    addLog(`Sending to ${selectedAlgo.toUpperCase()} model...`, 'info');
+    const result = await recognizeWithFlask(cleanData, noisyData, activeNoises, selectedAlgo);
+
+    updatePredictionUI(result);
+
+    const drop = result.reliability_drop;
+    if (result.clean.digit !== result.noisy.digit) {
+      addLog(`⚠ Misclassification! Clean="${result.clean.digit}" → Noisy="${result.noisy.digit}" | Confidence drop: ${drop.toFixed(1)}%`, 'err');
+    } else if (drop > 20) {
+      addLog(`Correct prediction but reliability degraded by ${drop.toFixed(1)}%. Model under stress.`, 'warn');
+    } else {
+      addLog(`[${selectedAlgo.toUpperCase()}] Recognition successful. Digit="${result.noisy.digit}" | Confidence: ${Math.round(result.noisy.confidence*100)}%`, 'ok');
+    }
+
+    document.getElementById('compareAllBtn').disabled = false;
+
+  } catch (err) {
+    addLog(`Recognition failed: ${err.message}`, 'err');
+    addLog(`Make sure Flask server is running: python app.py`, 'warn');
+    document.getElementById('predictionDisplay').innerHTML = `<div class="empty-state"><div>⚠ Cannot reach Flask server</div><div style="font-size:0.65rem;margin-top:6px;">Run: python app.py</div></div>`;
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '▶ ANALYZE';
+}
+
+// ── Compare All Algorithms ─────────────────────────────────────
+async function analyzeAll() {
+  if (!hasDrawn) return;
+  const btn = document.getElementById('compareAllBtn');
+  btn.disabled = true;
+  btn.textContent = 'Running all models...';
+
+  try {
+    let cleanData = getPixelData28x28(drawCanvas);
+    let noisyData = new ImageData(new Uint8ClampedArray(cleanData.data), cleanData.width, cleanData.height);
+
+    if (noiseState.rot) noisyData = applyRotation(noisyData, parseInt(document.getElementById('rotSlider').value));
+    if (noiseState.blur) noisyData = applyBlur(noisyData, parseInt(document.getElementById('blurSlider').value));
+    if (noiseState.gauss) noisyData = applyGaussianNoise(noisyData, parseInt(document.getElementById('gaussSlider').value));
+
+    addLog('Running all 4 algorithms for comparison...', 'info');
+    const results = await recognizeAllWithFlask(cleanData, noisyData);
+    renderAllAlgoTable(results);
+    addLog('All-algorithm comparison complete.', 'ok');
+
+  } catch (err) {
+    addLog(`Compare all failed: ${err.message}`, 'err');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '⚡ Compare All Algorithms';
+}
+
+function renderAllAlgoTable(results) {
+  const algoNames = { cnn: '🧠 CNN', svm: '✂️ SVM', knn: '📍 KNN', rf: '🌲 Random Forest' };
+  const section = document.getElementById('allAlgoSection');
+  const table = document.getElementById('allAlgoTable');
+
+  // Find best noisy confidence
+  let bestConf = -1;
+  let bestAlgo = null;
+  for (const [algo, r] of Object.entries(results)) {
+    if (!r.error && r.noisy.confidence > bestConf) {
+      bestConf = r.noisy.confidence;
+      bestAlgo = algo;
+    }
+  }
+
+  let html = `
+    <tr>
+      <th>Algorithm</th>
+      <th>Clean</th>
+      <th>Noisy</th>
+      <th>Confidence</th>
+      <th>Drop</th>
+    </tr>
+  `;
+
+  for (const [algo, r] of Object.entries(results)) {
+    if (r.error) {
+      html += `<tr><td>${algoNames[algo] || algo}</td><td colspan="4" style="color:var(--accent2)">Error: ${r.error}</td></tr>`;
+      continue;
+    }
+    const match = r.clean.digit === r.noisy.digit;
+    const isWinner = algo === bestAlgo;
+    html += `
+      <tr class="${isWinner ? 'winner' : ''}">
+        <td>${algoNames[algo] || algo}${isWinner ? ' 👑' : ''}</td>
+        <td class="correct">${r.clean.digit}</td>
+        <td class="${match ? 'correct' : 'wrong'}">${r.noisy.digit}</td>
+        <td class="${r.noisy.confidence > 0.8 ? 'correct' : r.noisy.confidence > 0.5 ? '' : 'wrong'}">
+          ${Math.round(r.noisy.confidence * 100)}%
+        </td>
+        <td style="color:${r.reliability_drop > 20 ? 'var(--accent2)' : 'var(--text-dim)'}">
+          ${r.reliability_drop > 0 ? '▼ ' + r.reliability_drop.toFixed(1) + '%' : '—'}
+        </td>
+      </tr>
+    `;
+  }
+
+  table.innerHTML = html;
+  section.style.display = 'block';
+}
+
+// ── Controls ───────────────────────────────────────────────────
+document.getElementById('recognizeBtn').addEventListener('click', analyze);
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 280, 280);
+  hasDrawn = false;
+  document.getElementById('recognizeBtn').disabled = true;
+  document.getElementById('predictionDisplay').innerHTML = `<div class="empty-state"><div class="big">✏️</div><div>Draw a digit and click ANALYZE</div></div>`;
+  document.getElementById('probBars').innerHTML = `<div class="empty-state" style="height:auto;padding:20px 0;font-size:0.6rem;">—</div>`;
+  document.getElementById('compareSection').style.display = 'none';
+  document.getElementById('allAlgoSection').style.display = 'none';
+  document.getElementById('compareAllBtn').disabled = true;
+  // Clear previews
+  ['cleanPreview','noisyPreview'].forEach(id => {
+    const c = document.getElementById(id);
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#888';
+    cx.fillRect(0,0,28,28);
+  });
+  addLog('Canvas cleared. Ready for new input.', 'info');
+});
+
+// Draw sample digit
+document.getElementById('sampleBtn').addEventListener('click', () => {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 280, 280);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 22;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // Draw digit "3"
+  ctx.beginPath();
+  ctx.moveTo(80, 70);
+  ctx.quadraticCurveTo(200, 60, 190, 140);
+  ctx.quadraticCurveTo(110, 145, 195, 145);
+  ctx.quadraticCurveTo(215, 210, 140, 220);
+  ctx.quadraticCurveTo(80, 220, 75, 195);
+  ctx.stroke();
+
+  hasDrawn = true;
+  document.getElementById('recognizeBtn').disabled = false;
+  addLog('Sample digit loaded (drawing "3").', 'info');
+});
+
+// Init previews
+['cleanPreview','noisyPreview'].forEach(id => {
+  const c = document.getElementById(id);
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#333';
+  cx.fillRect(0,0,28,28);
+});
+</script>
+</body>
+</html>
